@@ -1,0 +1,1 @@
+This repository provides the implementation, datasets, and evaluation scripts for studying how multimodal cognitive and informational interventions affect the rumor detection capability of large language models (LLMs).
