@@ -1,0 +1,13 @@
+sample_id,correct answer,Neither,web search,deep think,Both
+demo01,0,0,0,0,0
+demo02,1,0,1,0,1
+demo03,2,1,2,2,2
+demo04,0,1,0,0,0
+demo05,1,1,1,2,1
+demo06,2,2,1,2,2
+demo07,0,0,1,0,0
+demo08,1,2,1,1,2
+demo09,2,0,2,1,2
+demo10,0,0,0,1,0
+demo11,1,1,2,1,1
+demo12,2,2,2,2,
