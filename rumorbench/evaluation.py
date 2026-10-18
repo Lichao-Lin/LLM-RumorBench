@@ -14,6 +14,8 @@ TRUTH = "correct answer"
 def validate(data, labels):
     """One row per independent item, one response per condition."""
     required = ["sample_id", TRUTH, *CONDITIONS]
+    if data.columns.duplicated().any():
+        raise ValueError("Duplicate columns are not allowed")
     missing = set(required) - set(data.columns)
     if missing:
         raise ValueError(f"Missing columns: {sorted(missing)}")

@@ -4,12 +4,13 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 
 from kappa import simple_kappa_test
-from rumorbench.__main__ import read_table
+from rumorbench.__main__ import COMPARISON_COLUMNS, read_table, source_fingerprints
 from rumorbench.evaluation import CONDITIONS, TRUTH, evaluate, holm, score, validate
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -142,10 +143,59 @@ class EvaluationTests(unittest.TestCase):
             self.assertEqual(process.returncode, 0, process.stderr)
             result = json.loads((out / "results.json").read_text(encoding="utf-8"))
             self.assertEqual(len(result["provenance"]["input_sha256"]), 64)
+            self.assertEqual(result["provenance"]["source_sha256_lf"], source_fingerprints())
             self.assertEqual(len(pd.read_csv(out / "metrics.csv")), 8)
             self.assertEqual(len(pd.read_csv(out / "comparisons.csv")), 3)
             again = subprocess.run(command, cwd=ROOT, capture_output=True)
             self.assertNotEqual(again.returncode, 0)
+
+    def test_parser_uses_provided_snapshot(self):
+        payload = (ROOT / "examples/synthetic.csv").read_bytes()
+        with patch.object(Path, "read_bytes", side_effect=AssertionError("Second read")):
+            self.assertEqual(len(read_table("snapshot.csv", payload)), 12)
+
+    def test_duplicate_headers_rejected_csv_and_excel(self):
+        with self.assertRaisesRegex(ValueError, "unique"):
+            read_table("duplicate.csv", b"sample_id,Both,Both\na,0,1\n")
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "duplicate.xlsx"
+            pd.DataFrame([["a", "0", "1"]], columns=["sample_id", "Both", "Both"]).to_excel(
+                path, index=False)
+            with self.assertRaisesRegex(ValueError, "unique"):
+                read_table(path)
+        bad = fixture()
+        bad.columns = [*bad.columns[:-1], "Neither"]
+        with self.assertRaisesRegex(ValueError, "Duplicate"):
+            validate(bad, LABELS)
+
+    def test_literal_na_is_a_category(self):
+        payload = b"sample_id,correct answer,Neither,web search,deep think,Both\na,NA,NA,0,NA,NA\nb,0,0,0,0,0\n"
+        result = evaluate(read_table("literal.csv", payload), ["NA", "0"], resamples=100)
+        self.assertEqual(result["coverage"]["common_complete"], 2)
+
+    def test_empty_comparison_csv_retains_schema(self):
+        with tempfile.TemporaryDirectory() as temp:
+            frame = fixture()
+            frame["Both"] = ""
+            source, output = Path(temp) / "missing.csv", Path(temp) / "out"
+            frame.to_csv(source, index=False)
+            process = subprocess.run(
+                [sys.executable, "-m", "rumorbench", str(source), "--labels", *LABELS,
+                 "--resamples", "100", "--output", str(output)], cwd=ROOT, capture_output=True)
+            self.assertEqual(process.returncode, 0, process.stderr)
+            comparison = pd.read_csv(output / "comparisons.csv")
+            self.assertTrue(comparison.empty)
+            self.assertEqual(list(comparison.columns), COMPARISON_COLUMNS)
+
+    def test_heatmap_cli_smoke(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source, output = Path(temp) / "heatmap.xlsx", Path(temp) / "heatmap.png"
+            fixture().to_excel(source, index=False)
+            process = subprocess.run(
+                [sys.executable, "heatmap coding2.py", str(source), "--output", str(output)],
+                cwd=ROOT, capture_output=True)
+            self.assertEqual(process.returncode, 0, process.stderr)
+            self.assertEqual(output.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
 
 
 if __name__ == "__main__":

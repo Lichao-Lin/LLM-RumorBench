@@ -29,6 +29,13 @@ comparisons and common-case metrics use the same four-condition complete cohort.
 Report both coverage and estimates; complete-case analysis does not correct
 missing-not-at-random responses. No imputation is performed.
 
+Duplicate headers are rejected before pandas can rename them. Parsing and input
+hashing use one byte snapshot. Results include LF-normalized Python source hashes
+so local source edits can be distinguished even when the package version is unchanged.
+The main numerical package versions are recorded; requirements.txt pins direct
+dependencies, not every transitive dependency. Archive pip freeze separately when
+an exact full environment snapshot is needed.
+
 ## 3. Metrics and inference
 
 - Accuracy is the proportion of exact label matches.
