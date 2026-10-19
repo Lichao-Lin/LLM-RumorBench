@@ -3,6 +3,7 @@
 import argparse
 from datetime import datetime, timezone
 import json
+import math
 from pathlib import Path
 import socket
 import time
@@ -15,8 +16,10 @@ def chat(prompt, *, base_url="http://127.0.0.1:11434",
     """返回原始 API 响应。它可能含推理过程，需要按实验规则另行解析标签。"""
     if not prompt.strip():
         raise ValueError("问题不能为空")
-    if timeout <= 0 or max_tokens <= 0:
-        raise ValueError("timeout 和 max_tokens 必须大于 0")
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("timeout 必须是大于 0 的有限数值")
+    if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens <= 0:
+        raise ValueError("max_tokens 必须是大于 0 的整数")
     # 使用 OpenAI 兼容格式；这里访问的是本地 Ollama，不是云端收费 API。
     payload = {
         "model": model,
@@ -45,8 +48,15 @@ def chat(prompt, *, base_url="http://127.0.0.1:11434",
     except (URLError, TimeoutError, socket.timeout) as error:
         raise RuntimeError(
             f"连接本地模型失败：{error}；请检查服务、端口或增加 --timeout") from error
-    if not isinstance(result, dict) or not result.get("choices"):
-        raise ValueError("服务响应缺少 choices；请检查服务是否兼容 chat/completions")
+    # 不只检查字段存在，还检查类型，让异常响应得到中文提示而不是堆栈报错。
+    choices = result.get("choices") if isinstance(result, dict) else None
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        raise ValueError("服务响应的 choices 必须是非空对象列表")
+    message = choices[0].get("message")
+    if not isinstance(message, dict):
+        raise ValueError("服务响应缺少有效的 message 对象")
+    if message.get("content") is not None and not isinstance(message["content"], str):
+        raise ValueError("服务响应的 content 必须是文本或 null")
     return {
         "requested_model": model,
         "base_url": base_url,
@@ -67,15 +77,20 @@ def main():
     parser.add_argument("--output", type=Path, help="可选：保存原始请求和响应到新 JSON 文件")
     args = parser.parse_args()
     try:
+        # 提前检查，避免推理结束后才发现目标文件不能保存。
+        if args.output:
+            if args.output.exists():
+                raise ValueError("输出路径已存在，请换一个文件名")
+            args.output.parent.mkdir(parents=True, exist_ok=True)
         record = chat(args.prompt, base_url=args.base_url, model=args.model,
                       timeout=args.timeout, max_tokens=args.max_tokens)
         # content 不一定是最终标签；length 表示生成可能被预算截断。
         choice = record["response"]["choices"][0]
-        print(choice["message"].get("content", ""))
+        content = choice["message"].get("content")
+        print(content or "提示：模型未返回最终正文；原始响应可能仅含推理内容，请查看保存的记录。")
         if choice.get("finish_reason") == "length":
             print("提示：输出达到 token 上限，可增大 --max-tokens 再试。")
         if args.output:
-            args.output.parent.mkdir(parents=True, exist_ok=True)
             # x 模式拒绝覆盖已有实验记录。
             with args.output.open("x", encoding="utf-8") as handle:
                 json.dump(record, handle, ensure_ascii=False, indent=2, allow_nan=False)

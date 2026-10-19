@@ -4,6 +4,8 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
@@ -56,7 +58,8 @@ class LocalLLMTests(unittest.TestCase):
 
     def test_empty_or_invalid_arguments(self):
         for prompt, kwargs in [(" ", {}), ("x", {"timeout": 0}),
-                               ("x", {"max_tokens": -1})]:
+                               ("x", {"timeout": float("nan")}),
+                               ("x", {"max_tokens": -1}), ("x", {"max_tokens": 1.5})]:
             with self.subTest(kwargs=kwargs):
                 with patch.object(local_chat, "urlopen") as opened:
                     with self.assertRaises(ValueError):
@@ -64,7 +67,35 @@ class LocalLLMTests(unittest.TestCase):
                     opened.assert_not_called()
 
     def test_invalid_response(self):
-        for payload in ([], {}, {"choices": []}):
+        for payload in ([], {}, {"choices": []}, {"choices": "bad"},
+                        {"choices": [None]}, {"choices": [{}]},
+                        {"choices": [{"message": {"content": 7}}]}):
             with patch.object(local_chat, "urlopen", return_value=response(payload)):
                 with self.assertRaises(ValueError):
                     local_chat.chat("test")
+
+    def test_existing_output_fails_before_inference(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / "existing.json"
+            target.write_text("keep", encoding="utf-8")
+            with patch.object(sys, "argv", ["chat.py", "hello", "--output", str(target)]):
+                with patch.object(local_chat, "chat") as called:
+                    with patch("sys.stderr", new_callable=io.StringIO):
+                        with self.assertRaises(SystemExit) as exited:
+                            local_chat.main()
+                    self.assertEqual(exited.exception.code, 2)
+                    called.assert_not_called()
+            self.assertEqual(target.read_text(encoding="utf-8"), "keep")
+
+    def test_reasoning_only_response_is_saved_and_explained(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / "record.json"
+            payload = {"choices": [{"message": {"content": None, "reasoning": "analysis"},
+                                    "finish_reason": "length"}]}
+            with patch.object(sys, "argv", ["chat.py", "hello", "--output", str(target)]):
+                with patch.object(local_chat, "urlopen", return_value=response(payload)):
+                    with patch("sys.stdout", new_callable=io.StringIO) as output:
+                        local_chat.main()
+            self.assertIn("原始响应", output.getvalue())
+            self.assertIn("token", output.getvalue())
+            self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["response"], payload)
