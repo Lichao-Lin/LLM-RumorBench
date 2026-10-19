@@ -73,6 +73,13 @@ sample_id,correct answer,Neither,web search,deep think,Both
 
 每行是一个独立样本的一次四条件实验。空预测可以保留；真值不能为空；拒绝重复 ID 与未声明标签。只有空白单元格被视为缺失，字符串 `NA` 可以是合法类别。重复试验、同事件多条新闻应使用独立的分层/聚类设计，不能直接混入这里。
 
+## 本地运行 DeepSeek
+
+新增 [本地部署示例](deploy/local-llm/README.md)：用 Docker 启动 Ollama，
+以 DeepSeek-R1-Distill-Qwen-1.5B 为例，提供中文注释的 [Python 调用代码](deploy/local-llm/chat.py)。
+支持 CPU，另附 NVIDIA GPU 配置；默认只向本机开放端口。部署说明包含启动、下载模型、
+请求与停止命令。该示例用于采集模型回答，评分仍使用上面的离线评估流程。
+
 ## 文件关系
 
 ```text

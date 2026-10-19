@@ -1,0 +1,12 @@
+# 可选 NVIDIA GPU 覆盖文件。基础配置默认 CPU，无独立显卡也可使用。
+# Linux 需要 NVIDIA 驱动与 NVIDIA Container Toolkit。
+# Windows 使用支持 NVIDIA GPU 的 Docker Desktop / WSL2 配置。
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

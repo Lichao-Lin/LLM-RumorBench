@@ -1,0 +1,29 @@
+# 在仓库根目录运行：
+# docker compose -f deploy/local-llm/compose.yaml up -d
+name: rumorbench-local
+
+services:
+  ollama:
+    # 固定服务版本，避免 latest 更新后运行环境悄悄变化。
+    image: ollama/ollama:0.40.6
+    restart: unless-stopped
+    environment:
+      # 容器内监听所有网卡，宿主机端口映射才能访问到服务。
+      # 对外是否开放由下面 ports 左侧的地址决定。
+      OLLAMA_HOST: "0.0.0.0:11434"
+    ports:
+      # 仅本机可访问。若端口已占用，可把左边的 11434 改成其他端口。
+      - "127.0.0.1:11434:11434"
+    volumes:
+      # 模型存入独立卷：重启/重建容器无需重新下载。
+      - model-cache:/root/.ollama
+    healthcheck:
+      # 这里只检查服务可用，不代表 DeepSeek 模型已经下载完毕。
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  model-cache:
