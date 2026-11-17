@@ -154,6 +154,29 @@ class EvaluationTests(unittest.TestCase):
         with patch.object(Path, "read_bytes", side_effect=AssertionError("Second read")):
             self.assertEqual(len(read_table("snapshot.csv", payload)), 12)
 
+    def test_csv_surplus_field_fails_without_creating_results(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source, output = Path(temp) / "malformed.csv", Path(temp) / "out"
+            source.write_bytes(
+                b"sample_id,correct answer,Neither,web search,deep think,Both\n"
+                b"exported-row,0,1,1,0,1,1\n"
+            )
+            process = subprocess.run(
+                [sys.executable, "-m", "rumorbench", str(source), "--labels", *LABELS,
+                 "--resamples", "100", "--output", str(output)], cwd=ROOT,
+                capture_output=True, text=True)
+            self.assertEqual(process.returncode, 2)
+            self.assertIn("CSV line 2 has 7 fields; expected at most 6", process.stderr)
+            self.assertFalse(output.exists())
+
+    def test_csv_quoted_id_and_missing_predictions(self):
+        payload = (b"sample_id,correct answer,Neither,web search,deep think,Both\n"
+                   b'"report,1",0,1,0,0,\n'
+                   b"report-2,1,1,1,1\n")
+        frame = read_table("valid.csv", payload)
+        self.assertEqual(frame["sample_id"].tolist(), ["report,1", "report-2"])
+        self.assertEqual(frame["Both"].tolist(), ["", ""])
+
     def test_duplicate_headers_rejected_csv_and_excel(self):
         with self.assertRaisesRegex(ValueError, "unique"):
             read_table("duplicate.csv", b"sample_id,Both,Both\na,0,1\n")

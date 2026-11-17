@@ -24,7 +24,8 @@ def read_table(path, payload=None):
     path = Path(path)
     payload = path.read_bytes() if payload is None else payload
     if path.suffix.lower() == ".csv":
-        header = next(csv.reader(io.StringIO(payload.decode("utf-8-sig"))), [])
+        records = csv.reader(io.StringIO(payload.decode("utf-8-sig"), newline=""))
+        header = next(records, [])
     elif path.suffix.lower() == ".xlsx":
         workbook = load_workbook(io.BytesIO(payload), read_only=True, data_only=True)
         try:
@@ -35,8 +36,17 @@ def read_table(path, payload=None):
         raise ValueError("Input must be .csv or .xlsx")
     if not header or len(set(header)) != len(header):
         raise ValueError("Input headers must be nonempty and unique")
-    reader = pd.read_csv if path.suffix.lower() == ".csv" else pd.read_excel
-    return reader(io.BytesIO(payload), dtype=str, keep_default_na=False)
+    if path.suffix.lower() == ".csv":
+        # pandas can interpret surplus leading fields as an implicit row index.
+        try:
+            for record in records:
+                if len(record) > len(header):
+                    raise ValueError(f"CSV line {records.line_num} has {len(record)} fields; "
+                                     f"expected at most {len(header)}")
+        except csv.Error as error:
+            raise ValueError(f"Invalid CSV at line {records.line_num}: {error}") from error
+        return pd.read_csv(io.BytesIO(payload), dtype=str, keep_default_na=False)
+    return pd.read_excel(io.BytesIO(payload), dtype=str, keep_default_na=False)
 
 
 def source_fingerprints():
