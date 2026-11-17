@@ -73,6 +73,8 @@ sample_id,correct answer,Neither,web search,deep think,Both
 
 每行是一个独立样本的一次四条件实验。空预测可以保留；真值不能为空；拒绝重复 ID 与未声明标签。只有空白单元格被视为缺失，字符串 `NA` 可以是合法类别。重复试验、同事件多条新闻应使用独立的分层/聚类设计，不能直接混入这里。
 
+CSV 数据行的字段不能多于表头。字段内的逗号需要用双引号包住整个字段。
+
 ## 本地运行 DeepSeek
 
 新增 [本地部署示例](deploy/local-llm/README.md)：用 Docker 启动 Ollama，
